@@ -186,5 +186,5 @@ async function startBot() {
     }
 }
 
-console.log('🚀 Iniciando PanBot...');
+console.log('🚀 Iniciando PanBot con Node.js 20...');
 startBot();
