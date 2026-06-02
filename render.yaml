@@ -3,19 +3,12 @@ services:
     name: bot-panaderia
     runtime: node
     plan: free
-    buildCommand: |
-      npm install
-      rm -rf node_modules/whatsapp-web.js/node_modules/puppeteer/.local-chromium
-      npx puppeteer browsers install chrome
+    buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PUPPETEER_SKIP_DOWNLOAD
-        value: false
-      - key: PORT
-        value: 10000
       - key: DEEPSEEK_API_KEY
         sync: false
-    healthCheckPath: /health
-    autoDeploy: true
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
