@@ -1,22 +1,20 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const fetch = require('node-fetch');
 const fs = require('fs');
 require('dotenv').config();
 
-// ============= LIMPIAR SESIÓN CORRUPTA =============
+// ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
-
-// 👇 PONLO EN true UNA SOLA VEZ, luego cambia a false
-const FORZAR_LIMPIEZA = true;
+const FORZAR_LIMPIEZA = true;  // Cambiar a false después de escanear QR
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
-    console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
+    console.log('🗑️ LIMPIANDO SESIÓN...');
     fs.rmSync(authFolder, { recursive: true, force: true });
-    console.log('✅ Sesión eliminada');
+    fs.mkdirSync(authFolder, { recursive: true });
+    console.log('✅ Sesión limpiada');
 }
-// ===================================================
 
 // ============= CONFIGURACIÓN =============
 const PORT = process.env.PORT || 10000;
@@ -56,7 +54,7 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`🌐 Dashboard: http://localhost:${PORT}`);
 });
 
@@ -113,42 +111,29 @@ async function getDeepSeekResponse(userMessage, chatId) {
     }
 }
 
-// ============= WHATSAPP CON BAILEYS (VERSIÓN CORREGIDA) =============
-if (!fs.existsSync(authFolder)) {
-    fs.mkdirSync(authFolder, { recursive: true });
-}
-
+// ============= WHATSAPP =============
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 10;
 
 async function startBot() {
     try {
-        // Obtener la última versión disponible de WhatsApp Web
-        const { version, isLatest } = await fetchLatestBaileysVersion();
-        console.log(`📱 Usando versión de WhatsApp: ${version}`);
-        
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         
         const sock = makeWASocket({
             auth: state,
-            version: version, // Usar la versión más reciente [citation:4]
             browser: ['PanBot', 'Chrome', '120.0.0'],
             syncFullHistory: false,
             printQRInTerminal: false,
             keepAliveIntervalMs: 30000,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            generateHighQualityLinkPreview: false,
-            patchMessageBeforeSending: (message) => message,
         });
         
-        sock.ev.on('connection.update', async (update) => {
+        sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
                 console.log('\n📱 ESCANEA ESTE QR CON WHATSAPP:\n');
                 qrcode.generate(qr, { small: true });
-                console.log('\n⚠️ El QR expira rápido. Escanéalo en los próximos 20 segundos.\n');
+                console.log('\n⚠️ Escanéalo rápido. Expira en 20 segundos.\n');
                 reconnectAttempts = 0;
             }
             
@@ -156,20 +141,11 @@ async function startBot() {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 console.log(`❌ Conexión cerrada. Código: ${statusCode}`);
                 
-                // Si es 405, limpiar sesión y reintentar [citation:4]
-                if (statusCode === 405) {
-                    console.log('🗑️ Error 405 - Limpiando sesión corrupta...');
-                    fs.rmSync(authFolder, { recursive: true, force: true });
-                    fs.mkdirSync(authFolder, { recursive: true });
-                }
-                
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttempts++;
-                    const delay = Math.min(10000 * reconnectAttempts, 30000);
+                    const delay = Math.min(5000 * reconnectAttempts, 30000);
                     console.log(`🔄 Reintento ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} en ${delay/1000}s...`);
                     setTimeout(() => startBot(), delay);
-                } else {
-                    console.log('❌ Máximos reintentos alcanzados. Verifica tu conexión.');
                 }
             } else if (connection === 'open') {
                 console.log('\n✅ ¡BOT CONECTADO A WHATSAPP!');
@@ -191,32 +167,24 @@ async function startBot() {
                 let messageText = msg.message.conversation || 
                                  msg.message.extendedTextMessage?.text || '';
                 
-                if (!messageText || messageText.trim().length === 0) return;
+                if (!messageText) return;
                 
-                console.log(`📩 Mensaje: ${messageText.substring(0, 50)}...`);
+                console.log(`📩 Mensaje: ${messageText.substring(0, 50)}`);
                 
                 await sock.sendMessage(from, { text: '🫘 *PanBot está pensando...*' });
                 const respuesta = await getDeepSeekResponse(messageText, from);
-                const respuestaFinal = respuesta.length > 2000 ? respuesta.substring(0, 1997) + '...' : respuesta;
-                await sock.sendMessage(from, { text: respuestaFinal });
-                
-                console.log(`✅ Respuesta enviada`);
+                await sock.sendMessage(from, { text: respuesta });
                 
             } catch (error) {
-                console.error('Error en mensaje:', error);
+                console.error('Error:', error);
             }
         });
         
-        sock.ev.on('error', (error) => {
-            console.error('❌ Error en socket:', error);
-        });
-        
     } catch (error) {
-        console.error('❌ Error iniciando bot:', error);
+        console.error('❌ Error:', error);
         setTimeout(() => startBot(), 10000);
     }
 }
 
-console.log('🚀 Iniciando PanBot con DeepSeek...');
-console.log(`🔧 Entorno: ${process.env.NODE_ENV === 'production' ? 'Render' : 'Local'}`);
+console.log('🚀 Iniciando PanBot...');
 startBot();
