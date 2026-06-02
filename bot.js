@@ -142,9 +142,17 @@ async function startBot() {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
-                console.log('\n📱 ESCANEA ESTE QR CON WHATSAPP:\n');
-                qrcode.generate(qr, { small: true });
-                console.log('\n⚠️ Escanéalo rápido. Expira en 20 segundos.\n');
+                console.log('\n📱 ESCANEA ESTE QR CON WHATSAPP:');
+                console.log('⚠️  IMPORTANTE: Ajusta el zoom de tu cámara o aléjala/acércala hasta que lo detecte.\n');
+                
+                // Generar QR en tamaño "medium" (más grande y legible)
+                qrcode.generate(qr, { small: false });  // false = más grande
+                
+                // Mostrar enlace alternativo por si el QR no se ve bien
+                console.log('\n🔗 SI EL QR NO FUNCIONA, USA ESTE ENLACE:');
+                console.log(`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(qr)}`);
+                
+                console.log('\n⏱️  El QR expira en 20 segundos. Si no alcanzas, espera a que se genere uno nuevo.\n');
                 reconnectAttempts = 0;
             }
             
@@ -197,6 +205,8 @@ async function startBot() {
     }
 }
 
-console.log('🚀 Iniciando PanBot...');
-console.log(`Versión de Node: ${process.version}`);
+console.log('🚀 Iniciando PanBot con DeepSeek...');
+console.log(`📅 Versión de Node: ${process.version}`);
+console.log('🔧 El bot está iniciando, espera el QR...\n');
+
 startBot();
