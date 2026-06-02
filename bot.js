@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const fetch = require('node-fetch');
@@ -8,13 +8,13 @@ require('dotenv').config();
 // ============= LIMPIAR SESIÓN CORRUPTA =============
 const authFolder = './auth_data';
 
-// 👇 CAMBIA ESTO A false DESPUÉS DE QUE FUNCIONE 👇
-const FORZAR_LIMPIEZA = true;  // ¡PONLO EN true AHORA!
+// 👇 PONLO EN true UNA SOLA VEZ, luego cambia a false
+const FORZAR_LIMPIEZA = true;
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
     console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
     fs.rmSync(authFolder, { recursive: true, force: true });
-    console.log('✅ Sesión eliminada. El bot generará un nuevo QR.');
+    console.log('✅ Sesión eliminada');
 }
 // ===================================================
 
@@ -63,7 +63,7 @@ const server = app.listen(PORT, () => {
 // ============= FUNCIÓN DEEPSEEK =============
 async function getDeepSeekResponse(userMessage, chatId) {
     try {
-        if (!DEEPSEEK_API_KEY) return "🔧 API no configurada. Contacta al administrador.";
+        if (!DEEPSEEK_API_KEY) return "🔧 API no configurada.";
         
         if (!chatHistories.has(chatId)) {
             chatHistories.set(chatId, []);
@@ -78,7 +78,7 @@ async function getDeepSeekResponse(userMessage, chatId) {
         
         const systemMessage = {
             role: "system",
-            content: `Eres "PanBot" de "Panadería El Buen Pan". Horarios: Lun-Sáb 8am-8pm, Dom 9am-1pm. Dirección: Av. Principal 123. Tel: 11-1234-5678. Productos: Pan francés $200 c/u o $2000 docena, Pan integral $500/kg, Facturas $150 c/u o $1500 docena, Medialunas $100, Tortas desde $5000 (24hs encargo). Promos: Martes medialunas 2x1, Jueves facturas 10% off, Sábados pan integral 15% off. Responde AMABLE, CONCISO, en español, con emojis ocasionalmente 🥖`
+            content: `Eres "PanBot" de "Panadería El Buen Pan". Horarios: Lun-Sáb 8am-8pm, Dom 9am-1pm. Dirección: Av. Principal 123. Tel: 11-1234-5678. Productos: Pan francés $200 c/u o $2000 docena, Pan integral $500/kg, Facturas $150 c/u o $1500 docena, Medialunas $100, Tortas desde $5000. Promos: Martes medialunas 2x1, Jueves facturas 10% off, Sábados pan integral 15% off. Responde AMABLE, CONCISO, en español, con emojis.`
         };
         
         const messages = [systemMessage, ...history];
@@ -113,36 +113,42 @@ async function getDeepSeekResponse(userMessage, chatId) {
     }
 }
 
-// ============= WHATSAPP CON BAILEYS (VERSIÓN SIMPLIFICADA) =============
+// ============= WHATSAPP CON BAILEYS (VERSIÓN CORREGIDA) =============
 if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
 }
 
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 async function startBot() {
     try {
+        // Obtener la última versión disponible de WhatsApp Web
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`📱 Usando versión de WhatsApp: ${version}`);
+        
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         
-        // Configuración simplificada - sin Browsers
         const sock = makeWASocket({
             auth: state,
-            browser: ['PanBot', 'Chrome', '120.0.0'], // Formato manual en lugar de Browsers
+            version: version, // Usar la versión más reciente [citation:4]
+            browser: ['PanBot', 'Chrome', '120.0.0'],
             syncFullHistory: false,
             printQRInTerminal: false,
             keepAliveIntervalMs: 30000,
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
+            generateHighQualityLinkPreview: false,
+            patchMessageBeforeSending: (message) => message,
         });
         
-        sock.ev.on('connection.update', (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
                 console.log('\n📱 ESCANEA ESTE QR CON WHATSAPP:\n');
                 qrcode.generate(qr, { small: true });
-                console.log('\n⚠️ El QR expira rápido. Escanéalo cuanto antes.\n');
+                console.log('\n⚠️ El QR expira rápido. Escanéalo en los próximos 20 segundos.\n');
                 reconnectAttempts = 0;
             }
             
@@ -150,18 +156,24 @@ async function startBot() {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 console.log(`❌ Conexión cerrada. Código: ${statusCode}`);
                 
+                // Si es 405, limpiar sesión y reintentar [citation:4]
+                if (statusCode === 405) {
+                    console.log('🗑️ Error 405 - Limpiando sesión corrupta...');
+                    fs.rmSync(authFolder, { recursive: true, force: true });
+                    fs.mkdirSync(authFolder, { recursive: true });
+                }
+                
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttempts++;
-                    const delay = Math.min(5000 * reconnectAttempts, 30000);
+                    const delay = Math.min(10000 * reconnectAttempts, 30000);
                     console.log(`🔄 Reintento ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} en ${delay/1000}s...`);
                     setTimeout(() => startBot(), delay);
                 } else {
-                    console.log('❌ Máximos reintentos alcanzados. Reinicia manualmente.');
+                    console.log('❌ Máximos reintentos alcanzados. Verifica tu conexión.');
                 }
             } else if (connection === 'open') {
                 console.log('\n✅ ¡BOT CONECTADO A WHATSAPP!');
-                console.log('🤖 Bot con DeepSeek AI activo');
-                console.log('🎉 El bot ya está listo para responder mensajes\n');
+                console.log('🤖 Bot con DeepSeek AI activo\n');
                 reconnectAttempts = 0;
             }
         });
@@ -183,24 +195,15 @@ async function startBot() {
                 
                 console.log(`📩 Mensaje: ${messageText.substring(0, 50)}...`);
                 
-                // Indicador de escritura
                 await sock.sendMessage(from, { text: '🫘 *PanBot está pensando...*' });
-                
                 const respuesta = await getDeepSeekResponse(messageText, from);
-                
-                // Limitar respuesta a 2000 caracteres
                 const respuestaFinal = respuesta.length > 2000 ? respuesta.substring(0, 1997) + '...' : respuesta;
                 await sock.sendMessage(from, { text: respuestaFinal });
                 
-                console.log(`✅ Respuesta enviada a ${from}`);
+                console.log(`✅ Respuesta enviada`);
                 
             } catch (error) {
                 console.error('Error en mensaje:', error);
-                if (m?.messages[0]?.key?.remoteJid) {
-                    await sock.sendMessage(m.messages[0].key.remoteJid, { 
-                        text: 'Lo siento, hubo un error. Intentá de nuevo. 🥨' 
-                    });
-                }
             }
         });
         
@@ -210,14 +213,10 @@ async function startBot() {
         
     } catch (error) {
         console.error('❌ Error iniciando bot:', error);
-        console.log('🔄 Reiniciando en 10 segundos...');
         setTimeout(() => startBot(), 10000);
     }
 }
 
-// ============= INICIAR =============
 console.log('🚀 Iniciando PanBot con DeepSeek...');
 console.log(`🔧 Entorno: ${process.env.NODE_ENV === 'production' ? 'Render' : 'Local'}`);
-console.log('📱 Versión: Baileys (sin Puppeteer)\n');
-
 startBot();
