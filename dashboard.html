@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎙️ Bot WhatsApp + Gemini Live AI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .live-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .status-card {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            border-left: 5px solid #25D366;
+            transition: transform 0.2s;
+        }
+        
+        .status-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .status-card.voice-card {
+            border-left-color: #ff6b6b;
+            background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+        }
+        
+        .status-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .status-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #25D366;
+        }
+        
+        .voice-card .value {
+            color: #e17055;
+        }
+        
+        .section {
+            background: #f8f9fa;
+            margin: 30px 0;
+            padding: 30px;
+            border-radius: 15px;
+        }
+        
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #25D366;
+            padding-bottom: 10px;
+        }
+        
+        .qr-section {
+            text-align: center;
+            background: linear-gradient(135deg, #ff7b7b 0%, #666ad1 100%);
+            color: white;
+            border-radius: 15px;
+        }
+        
+        .qr-code {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        
+        .qr-code img {
+            width: 256px;
+            height: 256px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        .commands-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .command-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .command-card.voice-commands {
+            border-color: #ff6b6b;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 100%);
+        }
+        
+        .command-card code {
+            background: #f8f9fa;
+            padding: 5px 10px;
+            border-radius: 5px;
+            color: #e83e8c;
+            font-weight: bold;
+        }
+        
+        .voice-commands code {
+            background: #ffe8e8;
+            color: #dc3545;
+        }
+        
+        .chats-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .chat-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #25D366;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chat-item.inactive {
+            border-left-color: #dc3545;
+            opacity: 0.7;
+        }
+        
+        .chat-item.voice-active {
+            border-left-color: #ff6b6b;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe8e8 50%);
+        }
+        
+        .chat-status {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+        }
+        
+        .chat-status.active {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .chat-status.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .voice-indicator {
+            background: #fff3cd;
+            color: #856404;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.7em;
+            margin-left: 5px;
+        }
+        
+        .links {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .link-btn {
+            background: #25D366;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .link-btn:hover {
+            background: #128C7E;
+            transform: translateY(-2px);
+        }
+        
+        .link-btn.voice-btn {
+            background: #ff6b6b;
+        }
+        
+        .link-btn.voice-btn:hover {
+            background: #e55656;
+        }
+        
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .voices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .voice-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #ffe8e8;
+            text-align: center;
+        }
+        
+        .voice-card h4 {
+            color: #dc3545;
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .container { margin: 10px; border-radius: 10px; }
+            .content { padding: 20px; }
+            .header { padding: 20px; }
+            .header h1 { font-size: 2em; }
+            .links { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="live-badge">🎙️ GEMINI LIVE API</div>
+            <h1>🤖 Bot WhatsApp + Gemini Live AI</h1>
+            <p>Sistema inteligente com IA multimodal e respostas em áudio</p>
+        </div>
+        
+        <div class="content">
+            <div id="loading" class="loading">
+                <h2>⏳ Carregando dados...</h2>
+                <p>Conectando com o bot...</p>
+            </div>
+            
+            <div id="content-main" style="display: none;">
+                <!-- Status Cards -->
+                <div class="status-grid">
+                    <div class="status-card">
+                        <h3>Status do Bot</h3>
+                        <div class="value" id="bot-status">--</div>
+                    </div>
+                    <div class="status-card">
+                        <h3>Chats Ativos</h3>
+                        <div class="value" id="active-chats">0</div>
+                    </div>
+                    <div class="status-card voice-card">
+                        <h3>Chats com Voz</h3>
+                        <div class="value" id="voice-chats">0</div>
+                    </div>
+                    <div class="status-card">
+                        <h3>Total Mensagens</h3>
+                        <div class="value" id="total-messages">0</div>
+                    </div>
+                    <div class="status-card voice-card">
+                        <h3>Mensagens de Áudio</h3>
+                        <div class="value" id="audio-messages">0</div>
+                    </div>
+                    <div class="status-card">
+                        <h3>Tempo Online</h3>
+                        <div class="value" id="uptime">--</div>
+                    </div>
+                </div>
+                
+                <!-- QR Code Section -->
+                <div id="qr-section" class="section qr-section" style="display: none;">
+                    <h2>📱 Escaneie o QR Code</h2>
+                    <p>Use seu WhatsApp para escanear o código abaixo:</p>
+                    <div class="qr-code">
+                        <img id="qr-image" src="" alt="QR Code">
+                    </div>
+                    <p><strong>Como escanear:</strong></p>
+                    <p>1. Abra o WhatsApp no seu celular</p>
+                    <p>2. Toque nos 3 pontos (⋮) no canto superior</p>
+                    <p>3. Selecione "Aparelhos conectados"</p>
+                    <p>4. Toque em "Conectar um aparelho"</p>
+                    <p>5. Aponte a câmera para o QR Code acima</p>
+                </div>
+                
+                <!-- Comandos -->
+                <div class="section">
+                    <h2>📋 Comandos Disponíveis</h2>
+                    <div class="commands-grid">
+                        <div class="command-card">
+                            <h3>🤖 Controle do Bot</h3>
+                            <p><code>/bot</code> - Liga/desliga bot (toggle)</p>
+                            <p><code>/bot status</code> - Mostra status atual</p>
+                        </div>
+                        <div class="command-card voice-commands">
+                            <h3>🎙️ Sistema de Voz</h3>
+                            <p><code>/voz</code> - Liga/desliga modo voz</p>
+                            <p><code>/voz [nome]</code> - Define voz específica</p>
+                            <p><code>/voz show</code> - Mostra config atual</p>
+                            <p><code>/voz texto</code> - Desativa áudio</p>
+                        </div>
+                        <div class="command-card">
+                            <h3>🎭 Sistema de Prompts</h3>
+                            <p><code>/prompt [texto]</code> - Define novo prompt</p>
+                            <p><code>/prompt show</code> - Mostra prompt atual</p>
+                            <p><code>/prompt reset</code> - Reseta prompt padrão</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vozes Disponíveis -->
+                <div class="section">
+                    <h2>🎭 Vozes Disponíveis</h2>
+                    <div class="voices-grid" id="voices-grid">
+                        <!-- Será preenchido dinamicamente -->
+                    </div>
+                </div>
+                
+                <!-- Lista de Chats -->
+                <div class="section">
+                    <h2>💬 Chats Ativos</h2>
+                    <div id="chats-container">
+                        <div id="no-chats" style="text-align: center; color: #666; padding: 20px;">
+                            <p>Nenhuma conversa iniciada ainda.</p>
+                            <p>Envie uma mensagem ou áudio para o bot para começar!</p>
+                        </div>
+                        <div id="chats-list" class="chats-list"></div>
+                    </div>
+                </div>
+                
+                <!-- Estatísticas Detalhadas -->
+                <div class="section">
+                    <h2>📊 Informações do Sistema</h2>
+                    <div class="status-grid">
+                        <div class="status-card">
+                            <h3>Autenticação</h3>
+                            <div class="value" id="auth-status">--</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>Total de Chats</h3>
+                            <div class="value" id="total-chats">0</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>Chats Inativos</h3>
+                            <div class="value" id="inactive-chats">0</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>Prompts Personalizados</h3>
+                            <div class="value" id="custom-prompts">0</div>
+                        </div>
+                        <div class="status-card">
+                            <h3>Última Atividade</h3>
+                            <div class="value" id="last-update">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Links Úteis -->
+            <div class="links">
+                <a href="/api" class="link-btn">
+                    🔌 API JSON
+                </a>
+                <a href="https://github.com/seujao436/whatsapp-gemini-bot" class="link-btn" target="_blank">
+                    📁 GitHub Bot
+                </a>
+                <a href="https://github.com/seujao436/keep-alive-service" class="link-btn" target="_blank">
+                    🔄 Keep-Alive
+                </a>
+                <a href="https://aistudio.google.com/app/apikey" class="link-btn voice-btn" target="_blank">
+                    🎙️ Gemini API
+                </a>
+                <a href="https://render.com" class="link-btn" target="_blank">
+                    ☁️ Render
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let updateInterval;
+        
+        async function updateData() {
+            try {
+                const response = await fetch('/api');
+                const data = await response.json();
+                
+                // Update status cards
+                document.getElementById('bot-status').textContent = 
+                    data.authenticated ? '🟢 Online' : '🔴 Offline';
+                document.getElementById('active-chats').textContent = data.stats.activeChats;
+                document.getElementById('voice-chats').textContent = data.stats.voiceChats;
+                document.getElementById('total-messages').textContent = data.stats.totalMessages;
+                document.getElementById('audio-messages').textContent = data.stats.audioMessages || 0;
+                document.getElementById('uptime').textContent = data.uptime;
+                
+                // Update detailed stats
+                document.getElementById('auth-status').textContent = 
+                    data.authenticated ? '✅ Autenticado' : '❌ Desconectado';
+                document.getElementById('total-chats').textContent = data.stats.totalChats;
+                document.getElementById('inactive-chats').textContent = data.stats.inactiveChats;
+                document.getElementById('custom-prompts').textContent = data.stats.customPrompts;
+                document.getElementById('last-update').textContent = 
+                    new Date().toLocaleTimeString('pt-BR');
+                
+                // Handle QR Code
+                await handleQRCode(data);
+                
+                // Update chats list
+                updateChatsList(data.chats);
+                
+                // Update voices grid
+                updateVoicesGrid(data.availableVoices);
+                
+                // Show main content, hide loading
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content-main').style.display = 'block';
+                
+            } catch (error) {
+                console.error('Erro ao atualizar dados:', error);
+                document.getElementById('loading').innerHTML = 
+                    '<h2>❌ Erro de Conexão</h2><p>Tentando reconectar...</p>';
+            }
+        }
+        
+        async function handleQRCode(data) {
+            const qrSection = document.getElementById('qr-section');
+            
+            if (!data.authenticated && data.connectionStatus === 'aguardando_scan') {
+                try {
+                    const qrResponse = await fetch('/qr-code');
+                    const qrData = await qrResponse.json();
+                    
+                    if (qrData.success && qrData.qrCode) {
+                        document.getElementById('qr-image').src = qrData.qrCode;
+                        qrSection.style.display = 'block';
+                    } else {
+                        qrSection.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar QR Code:', error);
+                    qrSection.style.display = 'none';
+                }
+            } else {
+                qrSection.style.display = 'none';
+            }
+        }
+        
+        function updateChatsList(chats) {
+            const chatsList = document.getElementById('chats-list');
+            const noChats = document.getElementById('no-chats');
+            
+            if (!chats || chats.length === 0) {
+                noChats.style.display = 'block';
+                chatsList.style.display = 'none';
+                return;
+            }
+            
+            noChats.style.display = 'none';
+            chatsList.style.display = 'block';
+            
+            chatsList.innerHTML = chats.map(chat => `
+                <div class="chat-item ${chat.active ? '' : 'inactive'} ${chat.voiceEnabled ? 'voice-active' : ''}">
+                    <div>
+                        <strong>+${chat.phone}</strong>
+                        ${chat.voiceEnabled ? `<span class="voice-indicator">🎙️ ${chat.voiceModel}</span>` : ''}
+                        <br>
+                        <small>
+                            ${chat.customPrompt ? '🎭 Prompt: ' + chat.promptPreview : '📝 Prompt padrão'}
+                            <br>
+                            💬 ${chat.messageCount} mensagens
+                            ${chat.voiceEnabled ? ` • 🎙️ Modo voz ativo` : ''}
+                        </small>
+                    </div>
+                    <div class="chat-status ${chat.active ? 'active' : 'inactive'}">
+                        ${chat.active ? '✅ ATIVO' : '❌ INATIVO'}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function updateVoicesGrid(voices) {
+            const voicesGrid = document.getElementById('voices-grid');
+            
+            if (!voices || voices.length === 0) {
+                voicesGrid.innerHTML = '<p>Carregando vozes disponíveis...</p>';
+                return;
+            }
+            
+            const voiceDescriptions = {
+                'kore': 'Voz feminina natural e suave',
+                'aoede': 'Voz feminina expressiva e clara',
+                'puck': 'Voz masculina jovem e dinâmica',
+                'charon': 'Voz masculina profunda e séria'
+            };
+            
+            voicesGrid.innerHTML = voices.map(voice => `
+                <div class="voice-card">
+                    <h4>🎙️ ${voice.toUpperCase()}</h4>
+                    <p>${voiceDescriptions[voice] || 'Voz disponível'}</p>
+                    <code>/voz ${voice}</code>
+                </div>
+            `).join('');
+        }
+        
+        // Initial load
+        updateData();
+        
+        // Auto refresh every 15 seconds
+        updateInterval = setInterval(updateData, 15000);
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+    </script>
+</body>
+</html>

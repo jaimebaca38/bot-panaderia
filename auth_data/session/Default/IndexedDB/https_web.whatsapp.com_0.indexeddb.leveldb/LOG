@@ -1,0 +1,29 @@
+2026/06/02-01:05:55.965 5ec4 Reusing MANIFEST C:\Users\Usuario\Desktop\whatsapp-gemini-bot-main\auth_data\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/06/02-01:05:55.966 5ec4 Recovering log #46
+2026/06/02-01:05:55.999 5ec4 Reusing old log C:\Users\Usuario\Desktop\whatsapp-gemini-bot-main\auth_data\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000046.log 
+2026/06/02-01:05:55.999 5ec4 Delete type=2 #41
+2026/06/02-01:05:55.999 5ec4 Delete type=2 #44
+2026/06/02-01:05:55.999 5ec4 Delete type=2 #45
+2026/06/02-01:05:55.999 5ec4 Delete type=2 #47
+2026/06/02-01:06:00.526 6298 Level-0 table #52: started
+2026/06/02-01:06:00.543 6298 Level-0 table #52: 1044119 bytes OK
+2026/06/02-01:06:00.543 6298 Delete type=0 #46
+2026/06/02-01:06:00.547 6298 Compacting 1@1 + 2@2 files
+2026/06/02-01:06:00.593 6298 Generated table #53@1: 44973 keys, 2205783 bytes
+2026/06/02-01:06:00.607 6298 Generated table #54@1: 14951 keys, 884040 bytes
+2026/06/02-01:06:00.607 6298 Compacted 1@1 + 2@2 files => 3089823 bytes
+2026/06/02-01:06:00.607 6298 compacted to: files[ 0 0 2 0 0 0 0 ]
+2026/06/02-01:20:33.647 628c Level-0 table #56: started
+2026/06/02-01:20:33.670 628c Level-0 table #56: 1255502 bytes OK
+2026/06/02-01:20:33.671 628c Delete type=2 #48
+2026/06/02-01:20:33.671 628c Delete type=2 #49
+2026/06/02-01:20:33.671 628c Delete type=0 #51
+2026/06/02-01:20:33.671 628c Delete type=2 #52
+2026/06/02-01:20:50.766 6298 Compacting 1@1 + 2@2 files
+2026/06/02-01:20:50.856 6298 Generated table #57@1: 46676 keys, 2211213 bytes
+2026/06/02-01:20:50.883 6298 Generated table #58@1: 16547 keys, 1057553 bytes
+2026/06/02-01:20:50.883 6298 Compacted 1@1 + 2@2 files => 3268766 bytes
+2026/06/02-01:20:50.883 6298 compacted to: files[ 0 0 2 0 0 0 0 ]
+2026/06/02-01:20:50.884 6298 Delete type=2 #53
+2026/06/02-01:20:50.884 6298 Delete type=2 #54
+2026/06/02-01:20:50.884 6298 Delete type=2 #56
