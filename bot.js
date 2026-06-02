@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const fetch = require('node-fetch');
@@ -10,10 +10,12 @@ const authFolder = './auth_data';
 const FORZAR_LIMPIEZA = true;  // Cambiar a false después de escanear QR
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
-    console.log('🗑️ LIMPIANDO SESIÓN...');
+    console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
     fs.rmSync(authFolder, { recursive: true, force: true });
+    console.log('✅ Sesión eliminada');
+}
+if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
-    console.log('✅ Sesión limpiada');
 }
 
 // ============= CONFIGURACIÓN =============
@@ -117,14 +119,21 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 
 async function startBot() {
     try {
+        // Obtener la última versión de WhatsApp Web
+        const { version } = await fetchLatestBaileysVersion();
+        console.log(`📱 Usando versión de WhatsApp: ${version}`);
+        
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         
         const sock = makeWASocket({
             auth: state,
+            version: version,
             browser: ['PanBot', 'Chrome', '120.0.0'],
             syncFullHistory: false,
             printQRInTerminal: false,
             keepAliveIntervalMs: 30000,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
         });
         
         sock.ev.on('connection.update', (update) => {
@@ -176,15 +185,16 @@ async function startBot() {
                 await sock.sendMessage(from, { text: respuesta });
                 
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error en mensaje:', error);
             }
         });
         
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Error iniciando bot:', error);
         setTimeout(() => startBot(), 10000);
     }
 }
 
-console.log('🚀 Iniciando PanBot con Node.js 20...');
+console.log('🚀 Iniciando PanBot...');
+console.log(`Versión de Node: ${process.version}`);
 startBot();
