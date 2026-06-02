@@ -1,19 +1,21 @@
 services:
   - type: web
-    name: tts-assistente-voz-ia
+    name: bot-panaderia
     runtime: node
-    buildCommand: npm install
-    startCommand: npm start
     plan: free
-    autoDeploy: false
-    region: oregon
+    buildCommand: |
+      npm install
+      rm -rf node_modules/whatsapp-web.js/node_modules/puppeteer/.local-chromium
+      npx puppeteer browsers install chrome
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: false
       - key: PORT
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: ELEVENLABS_API_KEY
+        value: 10000
+      - key: DEEPSEEK_API_KEY
         sync: false
     healthCheckPath: /health
+    autoDeploy: true

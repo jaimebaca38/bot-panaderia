@@ -1,41 +1,52 @@
 {
-  "name": "whatsapp-gemini-live-bot",
-  "version": "2.5.0",
-  "description": "Bot WhatsApp com Gemini Live API - áudio nativo direto (lógica do alternativedialogue)",
+  "name": "panaderia-deepseek-bot",
+  "version": "3.1.0",
+  "description": "Bot de WhatsApp para Panadería con DeepSeek AI - Desplegado en Render",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "dev": "nodemon bot.js",
+    "postinstall": "npm rebuild && npx puppeteer browsers install chrome",
+    "clean": "rm -rf node_modules package-lock.json && npm install",
+    "setup": "npm install"
   },
   "keywords": [
     "whatsapp",
-    "gemini",
-    "gemini-live",
-    "gemini-2.0-flash-exp",
+    "deepseek",
+    "deepseek-api",
+    "panaderia",
     "ai",
     "bot",
     "chatbot",
-    "audio",
-    "voice",
-    "native-audio",
-    "tts",
-    "speech",
-    "alternativedialogue",
-    "render"
+    "whatsapp-web.js",
+    "puppeteer",
+    "render",
+    "automation"
   ],
-  "author": "seujao436",
+  "author": "Tu Nombre",
   "license": "MIT",
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "node-fetch": "^2.7.0",
-    "puppeteer": "^25.1.0",
+    "puppeteer": "^21.0.0",
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.23.0"
   },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
   "engines": {
-    "node": ">=18.x"
-  }
+    "node": "18.x",
+    "npm": "9.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tu-usuario/panaderia-bot"
+  },
+  "bugs": {
+    "url": "https://github.com/tu-usuario/panaderia-bot/issues"
+  },
+  "homepage": "https://github.com/tu-usuario/panaderia-bot#readme"
 }
