@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const fetch = require('node-fetch');
@@ -113,7 +113,7 @@ async function getDeepSeekResponse(userMessage, chatId) {
     }
 }
 
-// ============= WHATSAPP CON BAILEYS =============
+// ============= WHATSAPP CON BAILEYS (VERSIÓN SIMPLIFICADA) =============
 if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
 }
@@ -125,13 +125,15 @@ async function startBot() {
     try {
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         
+        // Configuración simplificada - sin Browsers
         const sock = makeWASocket({
             auth: state,
-            browser: Browsers.windowsDesktop('Chrome'),
+            browser: ['PanBot', 'Chrome', '120.0.0'], // Formato manual en lugar de Browsers
             syncFullHistory: false,
             printQRInTerminal: false,
-            defaultQueryTimeoutMs: undefined,
             keepAliveIntervalMs: 30000,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
         });
         
         sock.ev.on('connection.update', (update) => {
@@ -153,10 +155,13 @@ async function startBot() {
                     const delay = Math.min(5000 * reconnectAttempts, 30000);
                     console.log(`🔄 Reintento ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} en ${delay/1000}s...`);
                     setTimeout(() => startBot(), delay);
+                } else {
+                    console.log('❌ Máximos reintentos alcanzados. Reinicia manualmente.');
                 }
             } else if (connection === 'open') {
                 console.log('\n✅ ¡BOT CONECTADO A WHATSAPP!');
-                console.log('🤖 Bot con DeepSeek AI activo\n');
+                console.log('🤖 Bot con DeepSeek AI activo');
+                console.log('🎉 El bot ya está listo para responder mensajes\n');
                 reconnectAttempts = 0;
             }
         });
@@ -174,25 +179,45 @@ async function startBot() {
                 let messageText = msg.message.conversation || 
                                  msg.message.extendedTextMessage?.text || '';
                 
-                if (!messageText) return;
+                if (!messageText || messageText.trim().length === 0) return;
                 
-                console.log(`📩 Mensaje: ${messageText.substring(0, 50)}`);
+                console.log(`📩 Mensaje: ${messageText.substring(0, 50)}...`);
                 
+                // Indicador de escritura
                 await sock.sendMessage(from, { text: '🫘 *PanBot está pensando...*' });
+                
                 const respuesta = await getDeepSeekResponse(messageText, from);
-                await sock.sendMessage(from, { text: respuesta });
+                
+                // Limitar respuesta a 2000 caracteres
+                const respuestaFinal = respuesta.length > 2000 ? respuesta.substring(0, 1997) + '...' : respuesta;
+                await sock.sendMessage(from, { text: respuestaFinal });
+                
+                console.log(`✅ Respuesta enviada a ${from}`);
                 
             } catch (error) {
                 console.error('Error en mensaje:', error);
+                if (m?.messages[0]?.key?.remoteJid) {
+                    await sock.sendMessage(m.messages[0].key.remoteJid, { 
+                        text: 'Lo siento, hubo un error. Intentá de nuevo. 🥨' 
+                    });
+                }
             }
+        });
+        
+        sock.ev.on('error', (error) => {
+            console.error('❌ Error en socket:', error);
         });
         
     } catch (error) {
         console.error('❌ Error iniciando bot:', error);
+        console.log('🔄 Reiniciando en 10 segundos...');
         setTimeout(() => startBot(), 10000);
     }
 }
 
+// ============= INICIAR =============
 console.log('🚀 Iniciando PanBot con DeepSeek...');
-console.log(`🔧 Entorno: ${process.env.NODE_ENV === 'production' ? 'Render' : 'Local'}\n`);
+console.log(`🔧 Entorno: ${process.env.NODE_ENV === 'production' ? 'Render' : 'Local'}`);
+console.log('📱 Versión: Baileys (sin Puppeteer)\n');
+
 startBot();
