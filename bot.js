@@ -1,9 +1,11 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
-const express = require('express');
-const fetch = require('node-fetch');
-const fs = require('fs');
-require('dotenv').config();
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import qrcode from 'qrcode-terminal';
+import express from 'express';
+import fetch from 'node-fetch';
+import fs from 'fs';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
