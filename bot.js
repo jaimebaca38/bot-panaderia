@@ -9,7 +9,7 @@ dotenv.config();
 
 // ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
-const FORZAR_LIMPIEZA = false;  // Cambiar a true solo si hay problemas de conexión
+const FORZAR_LIMPIEZA = true;  // Cambiar a true solo si hay problemas de conexión
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
     console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
