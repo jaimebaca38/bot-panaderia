@@ -5,27 +5,17 @@ import express from 'express';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
-// ============= LIMPIAR SESIÓN =============
+// ============= CONFIGURACIÓN =============
 const authFolder = './auth_data';
-const FORZAR_LIMPIEZA = false;  // Cambiar a false después de escanear QR
-
-if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
-    console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
-    fs.rmSync(authFolder, { recursive: true, force: true });
-    console.log('✅ Sesión eliminada');
-}
-if (!fs.existsSync(authFolder)) {
-    fs.mkdirSync(authFolder, { recursive: true });
-}
-
-// ============= CONFIGURACIÓN DEL NEGOCIO =============
 const PORT = process.env.PORT || 10000;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
+// Datos del negocio
 const NEGOCIO = {
     nombre: "Panadería Delicias",
     direccion: "Angel Ibarcena Reynoso D1, Cerro Colorado 04014",
@@ -48,6 +38,9 @@ const chatHistories = new Map();
 const MAX_HISTORY = 20;
 
 let currentQR = null;
+let sock = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 // ============= SERVIDOR WEB =============
 const app = express();
@@ -73,13 +66,11 @@ app.get('/', (req, res) => {
             <h1>🥖 PanBot - ${NEGOCIO.nombre}</h1>
             <div class="status">
                 <p>Estado: <span class="online">✅ ONLINE</span></p>
-                <p>🤖 Usando DeepSeek AI</p>
                 <p>🥖 3 panes por S/1.00 | 🚚 Delivery</p>
             </div>
             <div class="qr-container">
                 <p>📱 Escanea este QR con WhatsApp:</p>
                 <img id="qrImg" class="qr-img" src="/qr-image" alt="Cargando QR...">
-                <p>⏱️ Si no ves el QR, recarga la página</p>
             </div>
             <p><a href="/qr-image" target="_blank">🔗 Abrir QR en nueva pestaña</a></p>
         </body>
@@ -92,15 +83,7 @@ app.get('/qr-image', async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'image/png' });
         res.end(currentQR);
     } else {
-        res.send(`
-            <html>
-            <body style="text-align:center; padding:50px;">
-                <h2>🔄 Esperando QR...</h2>
-                <p>El bot está iniciando. Espera unos segundos y recarga la página.</p>
-                <meta http-equiv="refresh" content="5">
-            </body>
-            </html>
-        `);
+        res.send("🔄 Esperando QR... Recarga la página en unos segundos.");
     }
 });
 
@@ -108,17 +91,16 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 
 app.listen(PORT, () => {
     console.log(`🌐 Dashboard: http://localhost:${PORT}`);
-    console.log(`📱 QR visible en: http://localhost:${PORT}/qr-image`);
 });
 
-// ============= FUNCIONES =============
+// ============= FUNCIONES DE RESPUESTA =============
 function esPreguntaUbicacion(mensaje) {
     const palabrasClave = ['dirección', 'ubicación', 'dónde están', 'cómo llegar', 'maps', 'dónde queda', 'ubicacion', 'mapa', 'referencia', 'buganvillas'];
     return palabrasClave.some(palabra => mensaje.toLowerCase().includes(palabra));
 }
 
 function esPreguntaPagos(mensaje) {
-    const palabrasClave = ['pago', 'pagar', 'yape', 'efectivo', 'transferencia', 'precio', 'cuánto', 'costo'];
+    const palabrasClave = ['pago', 'pagar', 'yape', 'efectivo', 'precio', 'cuánto', 'costo'];
     return palabrasClave.some(palabra => mensaje.toLowerCase().includes(palabra));
 }
 
@@ -190,15 +172,13 @@ async function getDeepSeekResponse(userMessage, chatId) {
     }
 }
 
-// ============= WHATSAPP =============
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 10;
-
+// ============= LÓGICA PRINCIPAL DE WHATSAPP =============
 async function startBot() {
     try {
+        console.log('🔄 Inicializando sesión...');
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
         
-        const sock = makeWASocket({
+        sock = makeWASocket({
             auth: state,
             browser: ['PanBot', 'Chrome', '120.0.0'],
             syncFullHistory: false,
@@ -209,40 +189,71 @@ async function startBot() {
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             
+            // --- Manejo del QR ---
             if (qr) {
-                console.log('\n📱 NUEVO QR GENERADO');
-                console.log('🌐 Abrir: https://bot-panaderia.onrender.com/qr-image\n');
-                
+                console.log('📱 Nuevo QR generado');
                 try {
                     const qrImageBuffer = await qrcode.toBuffer(qr, { type: 'png', margin: 2, width: 400 });
                     currentQR = qrImageBuffer;
-                    console.log('✅ QR listo para escanear');
+                    console.log('✅ QR listo en /qr-image');
                 } catch (err) {
                     console.error('Error generando QR:', err);
                 }
                 reconnectAttempts = 0;
             }
             
+            // --- Manejo de cierre de conexión ---
             if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 console.log(`❌ Conexión cerrada. Código: ${statusCode}`);
                 
+                // Código 515: ¡Requiere reinicio completo!
+                if (statusCode === 515) {
+                    console.log('🔄 Código 515 detectado: Reiniciando la conexión automáticamente...');
+                    
+                    // CRÍTICO: Esperar 5 segundos antes de reintentar para asegurar que los datos se guarden
+                    setTimeout(() => {
+                        startBot();
+                    }, 5000);
+                    return;
+                }
+                
+                // Código 401 o 405: Sesión corrupta o inválida
+                if (statusCode === 401 || statusCode === 405) {
+                    console.log('🗑️ Error de autenticación. Eliminando sesión corrupta...');
+                    if (fs.existsSync(authFolder)) {
+                        fs.rmSync(authFolder, { recursive: true, force: true });
+                    }
+                    console.log('✅ Sesión eliminada. Reiniciando...');
+                    setTimeout(() => startBot(), 3000);
+                    return;
+                }
+                
+                // Reconexión genérica con backoff
                 if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttempts++;
                     const delay = Math.min(5000 * reconnectAttempts, 30000);
                     console.log(`🔄 Reintento ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} en ${delay/1000}s...`);
                     setTimeout(() => startBot(), delay);
+                } else {
+                    console.log('❌ Máximos reintentos alcanzados. Por favor, reinicia manualmente.');
                 }
-            } else if (connection === 'open') {
+            } 
+            
+            // --- Conexión exitosa ---
+            else if (connection === 'open') {
                 console.log('\n✅ ¡BOT CONECTADO A WHATSAPP!');
-                console.log(`🥖 ${NEGOCIO.nombre} - 3 panes por S/1.00\n`);
+                console.log(`🥖 ${NEGOCIO.nombre} - 3 panes por S/1.00`);
+                console.log('🚚 Delivery disponible\n');
                 reconnectAttempts = 0;
-                currentQR = null;
+                currentQR = null; // QR ya no es necesario
             }
         });
         
+        // Guardar credenciales cuando se actualicen
         sock.ev.on('creds.update', saveCreds);
         
+        // Manejar mensajes entrantes
         sock.ev.on('messages.upsert', async (m) => {
             try {
                 const msg = m.messages[0];
@@ -256,8 +267,9 @@ async function startBot() {
                 
                 if (!messageText || messageText.trim().length === 0) return;
                 
-                console.log(`\n📩 Mensaje: ${messageText.substring(0, 50)}`);
+                console.log(`📩 Mensaje: ${messageText.substring(0, 50)}`);
                 
+                // Respuestas directas (sin depender de DeepSeek para estas)
                 if (esPreguntaUbicacion(messageText)) {
                     await sock.sendMessage(from, { text: generarRespuestaUbicacion() });
                     return;
@@ -278,13 +290,18 @@ async function startBot() {
                     return;
                 }
                 
+                // Respuesta con IA
                 await sock.sendMessage(from, { text: '🫘 *PanBot está pensando...*' });
                 const respuesta = await getDeepSeekResponse(messageText, from);
                 await sock.sendMessage(from, { text: respuesta });
                 
             } catch (error) {
-                console.error('❌ Error:', error);
+                console.error('❌ Error en mensaje:', error);
             }
+        });
+        
+        sock.ev.on('error', (error) => {
+            console.error('❌ Error en socket:', error);
         });
         
     } catch (error) {
