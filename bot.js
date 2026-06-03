@@ -1,11 +1,16 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
-import qrcode from 'qrcode-terminal';
+import qrcode from 'qrcode';
 import express from 'express';
 import fetch from 'node-fetch';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
@@ -25,7 +30,7 @@ const PORT = process.env.PORT || 10000;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
-// Datos de la panadería (NO confundir con dirección del cliente)
+// Datos de la panadería
 const NEGOCIO = {
     nombre: "Panadería Delicias",
     direccion: "Angel Ibarcena Reynoso D1, Cerro Colorado 04014",
@@ -36,7 +41,7 @@ const NEGOCIO = {
     horario: "Todos los días de 7am a 8pm"
 };
 
-// Costo de delivery por zona (ejemplo)
+// Costo de delivery por zona
 const COSTO_DELIVERY = {
     "cerro colorado": 3.00,
     "cerca": 3.00,
@@ -53,15 +58,18 @@ const VARIEDADES_PANES = [
     "Pan Francés", "Pan Especial"
 ];
 
-// Almacenar datos de conversación por cliente (dirección, pedido, etc.)
+// Almacenar datos de conversación por cliente
 const conversaciones = new Map();
-
 const chatHistories = new Map();
 const MAX_HISTORY = 20;
+
+// Variable global para guardar el QR temporalmente
+let currentQR = null;
 
 // ============= SERVIDOR WEB =============
 const app = express();
 
+// Dashboard principal
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -69,11 +77,14 @@ app.get('/', (req, res) => {
         <head>
             <title>PanBot - ${NEGOCIO.nombre}</title>
             <meta charset="UTF-8">
+            <meta http-equiv="refresh" content="5">
             <style>
                 body { font-family: Arial; text-align: center; padding: 50px; background: #f5e6d3; }
                 h1 { color: #8B4513; }
                 .status { padding: 20px; background: white; border-radius: 10px; display: inline-block; }
                 .online { color: green; font-weight: bold; }
+                .qr-container { margin-top: 30px; padding: 20px; background: white; border-radius: 10px; display: inline-block; }
+                .qr-img { max-width: 300px; border: 1px solid #ddd; }
             </style>
         </head>
         <body>
@@ -83,32 +94,69 @@ app.get('/', (req, res) => {
                 <p>🤖 Usando DeepSeek AI</p>
                 <p>🥖 3 panes por S/1.00 | 🚚 Delivery</p>
             </div>
+            <div class="qr-container" id="qrContainer">
+                <p>📱 Escanea este QR con WhatsApp:</p>
+                <img id="qrImg" class="qr-img" src="/qr-image" alt="Cargando QR...">
+                <p>⏱️ El QR se actualiza automáticamente si expira</p>
+            </div>
+            <p><a href="/qr-image" target="_blank">🔗 Abrir QR en nueva pestaña</a></p>
         </body>
         </html>
     `);
+});
+
+// Endpoint para obtener la imagen del QR
+app.get('/qr-image', (req, res) => {
+    if (currentQR) {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end(currentQR);
+    } else {
+        res.send(`
+            <html>
+            <body style="text-align:center; padding:50px;">
+                <h2>🔄 Esperando QR...</h2>
+                <p>El bot está iniciando. Espera unos segundos y recarga la página.</p>
+                <meta http-equiv="refresh" content="5">
+            </body>
+            </html>
+        `);
+    }
+});
+
+// Endpoint para obtener el QR en texto (alternativa)
+app.get('/qr-text', (req, res) => {
+    if (currentQR) {
+        res.send(`
+            <html>
+            <body style="text-align:center; padding:50px;">
+                <h2>📱 Código QR para WhatsApp</h2>
+                <p>Si la imagen no funciona, copia este texto en un generador QR externo:</p>
+                <textarea rows="5" cols="50">${currentQR}</textarea>
+                <p><a href="https://www.the-qrcode-generator.com/" target="_blank">Abrir generador QR</a></p>
+            </body>
+            </html>
+        `);
+    } else {
+        res.send("Esperando QR...");
+    }
 });
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 app.listen(PORT, () => {
     console.log(`🌐 Dashboard: http://localhost:${PORT}`);
+    console.log(`📱 QR visible en: http://localhost:${PORT}/qr-image`);
 });
 
 // ============= FUNCIONES DE UTILIDAD =============
 function esPreguntaUbicacion(mensaje) {
-    const palabrasClave = ['dirección', 'ubicación', 'dónde están', 'cómo llegar', 'maps', 'dónde queda', 'en qué calle', 'ubicame', 'llegar', 'como te encuentro', 'donde te encuentro', 'ubicacion', 'mapa', 'referencia', 'buganvillas'];
+    const palabrasClave = ['dirección', 'ubicación', 'dónde están', 'cómo llegar', 'maps', 'dónde queda', 'en qué calle', 'ubicame', 'llegar', 'donde te encuentro', 'ubicacion', 'mapa', 'referencia', 'buganvillas'];
     const mensajeLower = mensaje.toLowerCase();
     return palabrasClave.some(palabra => mensajeLower.includes(palabra));
 }
 
 function esPreguntaPagos(mensaje) {
     const palabrasClave = ['pago', 'pagar', 'yape', 'efectivo', 'transferencia', 'tarjeta', 'costo', 'precio', 'cuánto', 'valor'];
-    const mensajeLower = mensaje.toLowerCase();
-    return palabrasClave.some(palabra => mensajeLower.includes(palabra));
-}
-
-function esPreguntaDelivery(mensaje) {
-    const palabrasClave = ['delivery', 'envío', 'enviar', 'traer', 'llevar a casa', 'domicilio', 'reparto', 'mandar'];
     const mensajeLower = mensaje.toLowerCase();
     return palabrasClave.some(palabra => mensajeLower.includes(palabra));
 }
@@ -159,16 +207,6 @@ function detectarCantidadYPrecio(mensaje) {
     };
 }
 
-function extraerDireccion(mensaje) {
-    // Intentar extraer una dirección del mensaje
-    // Esto es básico; el usuario puede escribir la dirección directamente
-    const palabras = mensaje.split(' ');
-    if (palabras.length > 3) {
-        return mensaje.trim();
-    }
-    return null;
-}
-
 function calcularCostoDelivery(zona) {
     const zonaLower = zona.toLowerCase();
     for (const [key, costo] of Object.entries(COSTO_DELIVERY)) {
@@ -180,7 +218,7 @@ function calcularCostoDelivery(zona) {
 }
 
 // ============= FUNCIÓN DEEPSEEK =============
-async function getDeepSeekResponse(userMessage, chatId, contextoPedido = null) {
+async function getDeepSeekResponse(userMessage, chatId) {
     try {
         if (!DEEPSEEK_API_KEY) return "🔧 API no configurada.";
         
@@ -199,8 +237,8 @@ async function getDeepSeekResponse(userMessage, chatId, contextoPedido = null) {
             role: "system",
             content: `Eres "PanBot", asistente de "${NEGOCIO.nombre}".
 
-INFORMACIÓN DEL NEGOCIO (NO ES DIRECCIÓN DEL CLIENTE):
-- Dirección del negocio: ${NEGOCIO.direccion}
+INFORMACIÓN DEL NEGOCIO:
+- Dirección: ${NEGOCIO.direccion}
 - Referencia: ${NEGOCIO.referencia}
 - Horario: ${NEGOCIO.horario}
 - Teléfono: ${NEGOCIO.telefono}
@@ -214,27 +252,11 @@ VARIEDADES DE PAN:
 ${VARIEDADES_PANES.map(p => `- ${p}`).join('\n')}
 
 DELIVERY:
-- El cliente debe dar SU dirección (no la del negocio)
-- Después de recibir la dirección, calculás el costo según la zona
-- Ejemplo de zonas: Cerro Colorado (S/3.00), alrededores (S/5.00)
+- Preguntar la dirección del cliente
+- Calcular costo según zona (Cerro Colorado: S/3.00)
+- Total = (panes/3) + delivery
 
-REGLAS IMPORTANTES:
-1. NUNCA confundas la dirección del negocio con la dirección del cliente
-2. Si el cliente pide delivery, preguntale: "¿Cuál es tu dirección para el envío?"
-3. Cuando el cliente dé su dirección, confirmá el costo de delivery
-4. El total final = (cantidad de panes / 3) + costo de delivery
-5. Despedite siempre amablemente
-
-EJEMPLO DE CONVERSACIÓN:
-Cliente: "Quiero delivery de 30 panes"
-Tú: "¡Perfecto! 30 panes son S/10.00. ¿Cuál es tu dirección para el envío?"
-
-Cliente: "Vivo en Cerro Colorado, calle Los Pinos 123"
-Tú: "Gracias. El delivery a Cerro Colorado cuesta S/3.00. Total a pagar: S/13.00 (S/10.00 de panes + S/3.00 de envío). ¿Confirmas el pedido?"
-
-Cliente: "Confirmo"
-Tú: "¡Listo! Tu pedido llegará en 30-45 min. Puedes pagar con Yape al ${NEGOCIO.telefono} o efectivo al recibir. 🥖"
-`
+Responde SIEMPRE en español, amable, con emojis 🥖`
         };
         
         const messages = [systemMessage, ...history];
@@ -291,13 +313,25 @@ async function startBot() {
             defaultQueryTimeoutMs: 60000,
         });
         
-        sock.ev.on('connection.update', (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             
             if (qr) {
-                console.log('\n📱 ESCANEA ESTE QR CON WHATSAPP:\n');
-                qrcode.generate(qr, { small: false });
-                console.log('\n⏱️ El QR expira rápido. Escanéalo en los próximos 20 segundos.\n');
+                console.log('\n📱 NUEVO QR GENERADO');
+                console.log('🌐 Para escanearlo, abre:');
+                console.log(`   http://localhost:${PORT}/qr-image`);
+                console.log(`   https://bot-panaderia.onrender.com/qr-image`);
+                console.log('⏱️ El QR expira en 20 segundos. Si no alcanzas, se generará otro.\n');
+                
+                // Generar imagen QR y guardarla
+                try {
+                    const qrImageBuffer = await qrcode.toBuffer(qr, { type: 'png', margin: 2, width: 400 });
+                    currentQR = qrImageBuffer;
+                    console.log('✅ QR guardado en memoria. Visita /qr-image para verlo');
+                } catch (err) {
+                    console.error('Error generando imagen QR:', err);
+                }
+                
                 reconnectAttempts = 0;
             }
             
@@ -317,6 +351,7 @@ async function startBot() {
                 console.log(`🥖 ${NEGOCIO.nombre} - 3 panes por S/1.00`);
                 console.log('🚚 Delivery disponible\n');
                 reconnectAttempts = 0;
+                currentQR = null; // Limpiar QR ya que ya está conectado
             }
         });
         
@@ -337,26 +372,23 @@ async function startBot() {
                 
                 console.log(`\n📩 Mensaje: ${messageText.substring(0, 50)}`);
                 
-                // 1. Detectar ubicación del NEGOCIO
+                // Detectar ubicación del NEGOCIO
                 if (esPreguntaUbicacion(messageText)) {
-                    console.log(`📍 Respondiendo ubicación del negocio`);
                     await sock.sendMessage(from, { text: generarRespuestaUbicacion() });
                     return;
                 }
                 
-                // 2. Detectar preguntas de pago
+                // Detectar preguntas de pago
                 if (esPreguntaPagos(messageText)) {
-                    console.log(`💰 Respondiendo métodos de pago`);
                     await sock.sendMessage(from, { text: generarRespuestaPagos() });
                     return;
                 }
                 
-                // 3. Detectar pedidos con cantidades
+                // Detectar pedidos con cantidades
                 const pedidoInfo = detectarCantidadYPrecio(messageText);
                 if (pedidoInfo && (messageText.toLowerCase().includes('pan') || messageText.toLowerCase().includes('quiero') || messageText.toLowerCase().includes('dame') || messageText.toLowerCase().includes('delivery'))) {
                     console.log(`🧮 Pedido detectado: ${pedidoInfo.cantidad} panes = ${pedidoInfo.precioFormateado}`);
                     
-                    // Guardar el pedido en la conversación
                     conversaciones.set(from, {
                         pedido: pedidoInfo,
                         estado: 'esperando_direccion',
@@ -376,7 +408,7 @@ async function startBot() {
                     return;
                 }
                 
-                // 4. Manejar direcciones de envío (si el bot está esperando una dirección)
+                // Manejar direcciones de envío
                 const conversacion = conversaciones.get(from);
                 if (conversacion && conversacion.estado === 'esperando_direccion') {
                     const direccionCliente = messageText.trim();
@@ -392,7 +424,6 @@ async function startBot() {
                         respuesta += `Responde "Confirmo" para enviarlo.\n\n`;
                         respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono} (${NEGOCIO.titularYape}) o efectivo al recibir.`;
                         
-                        // Actualizar estado
                         conversacion.estado = 'esperando_confirmacion';
                         conversacion.direccion = direccionCliente;
                         conversacion.costoDelivery = costoDelivery;
@@ -407,7 +438,7 @@ async function startBot() {
                     }
                 }
                 
-                // 5. Manejar confirmación de pedido
+                // Manejar confirmación de pedido
                 if (conversacion && conversacion.estado === 'esperando_confirmacion' && 
                     (messageText.toLowerCase().includes('confirmo') || messageText.toLowerCase().includes('si') || messageText.toLowerCase().includes('acepto'))) {
                     
@@ -419,26 +450,23 @@ async function startBot() {
                     respuesta += `💰 Total: S/ ${conversacion.total.toFixed(2)}\n\n`;
                     respuesta += `⏱️ *Tiempo de entrega:* 30-45 minutos\n`;
                     respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono} o efectivo al recibir\n\n`;
-                    respuesta += `📞 *Cualquier consulta:* ${NEGOCIO.telefono}\n\n`;
                     respuesta += `🥖 ¡Gracias por tu pedido! 🥖`;
                     
-                    // Limpiar conversación después de confirmar
                     conversaciones.delete(from);
-                    
                     await sock.sendMessage(from, { text: respuesta });
                     return;
                 }
                 
-                // 6. Si el cliente dice "recoger en tienda" o similar
+                // Si el cliente dice "recoger en tienda"
                 if (messageText.toLowerCase().includes('recoger') || messageText.toLowerCase().includes('tienda') || messageText.toLowerCase().includes('local')) {
                     const respuesta = `📍 *Recojo en tienda:*\n${NEGOCIO.direccion}\n\n🕐 Horario: ${NEGOCIO.horario}\n\n💳 Paga con Yape al ${NEGOCIO.telefono} o efectivo al llegar.\n\n🥖 ¡Te esperamos!`;
                     await sock.sendMessage(from, { text: respuesta });
                     return;
                 }
                 
-                // 7. Respuesta normal con IA
+                // Respuesta normal con IA
                 await sock.sendMessage(from, { text: '🫘 *PanBot está pensando...*' });
-                const respuesta = await getDeepSeekResponse(messageText, from, conversacion);
+                const respuesta = await getDeepSeekResponse(messageText, from);
                 await sock.sendMessage(from, { text: respuesta });
                 
             } catch (error) {
@@ -472,7 +500,10 @@ setInterval(() => {
 // ============= INICIAR =============
 console.log('\n🚀 Iniciando PanBot...');
 console.log(`🥖 ${NEGOCIO.nombre}`);
-console.log('🚚 Delivery incluido\n');
+console.log('🚚 Delivery incluido');
+console.log(`\n📱 Para escanear el QR, abre:`);
+console.log(`   http://localhost:${PORT}/qr-image`);
+console.log(`   https://bot-panaderia.onrender.com/qr-image\n`);
 
 startBot();
 
