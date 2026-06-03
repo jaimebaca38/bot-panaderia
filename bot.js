@@ -10,7 +10,7 @@ dotenv.config();
 
 // ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
-const FORZAR_LIMPIEZA = true;  // Cambiar a false después de escanear QR
+const FORZAR_LIMPIEZA = false;  // Cambiar a false después de escanear QR
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
     console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
