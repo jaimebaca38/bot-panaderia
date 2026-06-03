@@ -9,7 +9,7 @@ dotenv.config();
 
 // ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
-const FORZAR_LIMPIEZA = false;  // Cambiar a true solo si hay problemas
+const FORZAR_LIMPIEZA = false;
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
     console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
@@ -20,20 +20,41 @@ if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
 }
 
-// ============= CONFIGURACIÓN =============
+// ============= CONFIGURACIÓN DEL NEGOCIO =============
 const PORT = process.env.PORT || 10000;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
-// Configuración de la panadería
-const GOOGLE_MAPS_URL = 'https://maps.app.goo.gl/vJZ96jEq58RU4iqe7';
-const UBICACION = {
-    direccion: 'Angel Ibarcena Reynoso D1, Cerro Colorado 04014',
-    referencia: 'A una cuadra de la entrada a Urb. Buganvillas',
-    maps: GOOGLE_MAPS_URL
+// Datos de la panadería (NO confundir con dirección del cliente)
+const NEGOCIO = {
+    nombre: "Panadería Delicias",
+    direccion: "Angel Ibarcena Reynoso D1, Cerro Colorado 04014",
+    referencia: "A una cuadra de la entrada a Urb. Buganvillas",
+    maps: "https://maps.app.goo.gl/vJZ96jEq58RU4iqe7",
+    telefono: "999555333",
+    titularYape: "James Baca",
+    horario: "Todos los días de 7am a 8pm"
 };
-const TELEFONO = '999555333';
-const NOMBRE_TITULAR = 'James Baca';
+
+// Costo de delivery por zona (ejemplo)
+const COSTO_DELIVERY = {
+    "cerro colorado": 3.00,
+    "cerca": 3.00,
+    "alrededores": 5.00,
+    "lejos": 8.00,
+    "default": 5.00
+};
+
+// Variedades de pan
+const VARIEDADES_PANES = [
+    "Pan de Molde", "Pan de Tres Puntas", "Pan Integral",
+    "Pan de Yema", "Pan Carioco", "Pan Lulo",
+    "Pan de Aceituna", "Pan Baguette", "Pan Ciabatta",
+    "Pan Francés", "Pan Especial"
+];
+
+// Almacenar datos de conversación por cliente (dirección, pedido, etc.)
+const conversaciones = new Map();
 
 const chatHistories = new Map();
 const MAX_HISTORY = 20;
@@ -46,7 +67,7 @@ app.get('/', (req, res) => {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>PanBot - Panadería Delicias</title>
+            <title>PanBot - ${NEGOCIO.nombre}</title>
             <meta charset="UTF-8">
             <style>
                 body { font-family: Arial; text-align: center; padding: 50px; background: #f5e6d3; }
@@ -56,11 +77,11 @@ app.get('/', (req, res) => {
             </style>
         </head>
         <body>
-            <h1>🥖 PanBot - Panadería Delicias</h1>
+            <h1>🥖 PanBot - ${NEGOCIO.nombre}</h1>
             <div class="status">
                 <p>Estado: <span class="online">✅ ONLINE</span></p>
                 <p>🤖 Usando DeepSeek AI</p>
-                <p>🥖 Panes artesanales | 🎂 Tortas temáticas | 🚚 Delivery</p>
+                <p>🥖 3 panes por S/1.00 | 🚚 Delivery</p>
             </div>
         </body>
         </html>
@@ -73,14 +94,9 @@ app.listen(PORT, () => {
     console.log(`🌐 Dashboard: http://localhost:${PORT}`);
 });
 
-// ============= MANEJO DE UBICACIÓN =============
+// ============= FUNCIONES DE UTILIDAD =============
 function esPreguntaUbicacion(mensaje) {
-    const palabrasClave = [
-        'dirección', 'ubicación', 'dónde están', 'cómo llegar', 
-        'maps', 'google maps', 'dónde queda', 'en qué calle',
-        'ubicame', 'llegar', 'como te encuentro', 'donde te encuentro',
-        'direccion', 'ubicacion', 'mapa', 'referencia', 'buganvillas'
-    ];
+    const palabrasClave = ['dirección', 'ubicación', 'dónde están', 'cómo llegar', 'maps', 'dónde queda', 'en qué calle', 'ubicame', 'llegar', 'como te encuentro', 'donde te encuentro', 'ubicacion', 'mapa', 'referencia', 'buganvillas'];
     const mensajeLower = mensaje.toLowerCase();
     return palabrasClave.some(palabra => mensajeLower.includes(palabra));
 }
@@ -91,47 +107,82 @@ function esPreguntaPagos(mensaje) {
     return palabrasClave.some(palabra => mensajeLower.includes(palabra));
 }
 
+function esPreguntaDelivery(mensaje) {
+    const palabrasClave = ['delivery', 'envío', 'enviar', 'traer', 'llevar a casa', 'domicilio', 'reparto', 'mandar'];
+    const mensajeLower = mensaje.toLowerCase();
+    return palabrasClave.some(palabra => mensajeLower.includes(palabra));
+}
+
 function generarRespuestaUbicacion() {
-    return `📍 ¡Claro! Te comparto nuestra ubicación:
+    return `📍 *Dirección del negocio:*
 
-🏠 *Panadería Delicias*
-${UBICACION.direccion}
-Referencia: ${UBICACION.referencia}
+🏠 ${NEGOCIO.nombre}
+${NEGOCIO.direccion}
+Referencia: ${NEGOCIO.referencia}
 
-🗺️ *Google Maps:* 
-${UBICACION.maps}
+🗺️ Google Maps: ${NEGOCIO.maps}
 
-🚗 *Cómo llegar:*
-- Estamos a una cuadra de la entrada a Urb. Buganvillas
-- Frente al parque principal del sector
+📞 Teléfono: ${NEGOCIO.telefono}
 
-📞 Si te perdés, llamanos o escríbenos al *${TELEFONO}*
+🕐 Horario: ${NEGOCIO.horario}
 
-🍞 ¡Te esperamos con los mejores panes! 🥖`;
+🍞 ¡Te esperamos! 🥖`;
 }
 
 function generarRespuestaPagos() {
-    return `💵 *Métodos de pago disponibles:*
+    return `💵 *Métodos de pago:*
 
-✅ *Yape:* ${TELEFONO} - Nombre: ${NOMBRE_TITULAR}
-✅ *Efectivo:* En nuestra tienda física
-✅ *Transferencia bancaria:* Consultar por WhatsApp
+✅ *Yape:* ${NEGOCIO.telefono} (${NEGOCIO.titularYape})
+✅ *Efectivo:* En nuestra tienda
+✅ *Transferencia:* Consultar por WhatsApp
 
-🎁 *Promociones especiales:*
-- Pago con Yape: 5% de descuento en tu primera compra
-- Efectivo: Sin recargo
+🎁 *Promoción:* 3 panes por S/1.00
 
-🚚 *Delivery:* Consulta disponibilidad según tu zona
+🚚 *Delivery:* Consulta costo según tu zona`;
+}
 
-📅 *Horario:* Todos los días de 7am a 8pm
+function detectarCantidadYPrecio(mensaje) {
+    const numeros = mensaje.match(/\d+/g);
+    if (!numeros) return null;
+    
+    let cantidad = parseInt(numeros[0]);
+    if (isNaN(cantidad) || cantidad <= 0) return null;
+    
+    const precioTotal = (cantidad / 3).toFixed(2);
+    const esPedidoGrande = cantidad >= 30;
+    
+    return {
+        cantidad: cantidad,
+        precio: parseFloat(precioTotal),
+        precioFormateado: `S/ ${precioTotal}`,
+        esPedidoGrande: esPedidoGrande
+    };
+}
 
-¡Elegí el método que más te convenga! 💰`;
+function extraerDireccion(mensaje) {
+    // Intentar extraer una dirección del mensaje
+    // Esto es básico; el usuario puede escribir la dirección directamente
+    const palabras = mensaje.split(' ');
+    if (palabras.length > 3) {
+        return mensaje.trim();
+    }
+    return null;
+}
+
+function calcularCostoDelivery(zona) {
+    const zonaLower = zona.toLowerCase();
+    for (const [key, costo] of Object.entries(COSTO_DELIVERY)) {
+        if (zonaLower.includes(key)) {
+            return costo;
+        }
+    }
+    return COSTO_DELIVERY.default;
 }
 
 // ============= FUNCIÓN DEEPSEEK =============
-async function getDeepSeekResponse(userMessage, chatId) {
+async function getDeepSeekResponse(userMessage, chatId, contextoPedido = null) {
     try {
-        if (!DEEPSEEK_API_KEY) return "🔧 API no configurada. Contacta al administrador.";
+        if (!DEEPSEEK_API_KEY) return "🔧 API no configurada.";
         
         if (!chatHistories.has(chatId)) {
             chatHistories.set(chatId, []);
@@ -146,59 +197,43 @@ async function getDeepSeekResponse(userMessage, chatId) {
         
         const systemMessage = {
             role: "system",
-            content: `Eres "PanBot", el asistente virtual de "Panadería Delicias". 
+            content: `Eres "PanBot", asistente de "${NEGOCIO.nombre}".
 
-🎯 INFORMACIÓN IMPORTANTE:
-- MONEDA: SOLES (S/.)
-- PRECIO ESPECIAL: 3 panes por S/ 1.00 (oferta básica)
-- DELIVERY: Consultar disponibilidad por zona
-- HORARIO: Todos los días de 7am a 8pm
+INFORMACIÓN DEL NEGOCIO (NO ES DIRECCIÓN DEL CLIENTE):
+- Dirección del negocio: ${NEGOCIO.direccion}
+- Referencia: ${NEGOCIO.referencia}
+- Horario: ${NEGOCIO.horario}
+- Teléfono: ${NEGOCIO.telefono}
+- Yape: ${NEGOCIO.telefono} (${NEGOCIO.titularYape})
 
-🥖 LISTA DE PANES (todos aplican 3x S/1.00):
-- Pan de Molde
-- Pan de Tres Puntas
-- Pan Integral
-- Pan de Yema
-- Pan Carioco
-- Pan Lulo
-- Pan de Aceituna
-- Pan Baguette
-- Pan Ciabatta
-- Pan Francés
-- Pan Especial
+PRECIOS:
+- 3 panes por S/1.00 (cualquier variedad)
+- Precio unitario: S/0.34
 
-🎂 TORTAS (encargos con 48hrs de anticipación):
-- Tortas de Cumpleaños: Desde S/ 45.00 (1kg)
-- Tortas Temáticas: Desde S/ 60.00 (diseños personalizados)
-- Sabores: Vainilla, Chocolate, Lúcuma, Tres leches, Frutos rojos
-- Rellenos: Manjar, Crema pastelera, Frutas, Chocolate
+VARIEDADES DE PAN:
+${VARIEDADES_PANES.map(p => `- ${p}`).join('\n')}
 
-💵 MÉTODOS DE PAGO:
-- YAPE: ${TELEFONO} (${NOMBRE_TITULAR})
-- Efectivo: En tienda
-- Transferencia: Consultar
+DELIVERY:
+- El cliente debe dar SU dirección (no la del negocio)
+- Después de recibir la dirección, calculás el costo según la zona
+- Ejemplo de zonas: Cerro Colorado (S/3.00), alrededores (S/5.00)
 
-📍 UBICACIÓN:
-- Dirección: ${UBICACION.direccion}
-- Referencia: ${UBICACION.referencia}
+REGLAS IMPORTANTES:
+1. NUNCA confundas la dirección del negocio con la dirección del cliente
+2. Si el cliente pide delivery, preguntale: "¿Cuál es tu dirección para el envío?"
+3. Cuando el cliente dé su dirección, confirmá el costo de delivery
+4. El total final = (cantidad de panes / 3) + costo de delivery
+5. Despedite siempre amablemente
 
-🚚 DELIVERY:
-- Zonas cercanas: Consultar disponibilidad
-- Costo: Según zona (preguntar)
-- Tiempo: 30-45 min aprox
+EJEMPLO DE CONVERSACIÓN:
+Cliente: "Quiero delivery de 30 panes"
+Tú: "¡Perfecto! 30 panes son S/10.00. ¿Cuál es tu dirección para el envío?"
 
-INSTRUCCIONES IMPORTANTES:
-- Responde SIEMPRE en español
-- Sé amable, cálido y usa emojis ocasionalmente 🥖🍞🎂
-- Si preguntan precios, menciona la oferta de "3 panes por S/1.00"
-- Para pedidos grandes, pregunta cantidad y tipo de pan
-- Para tortas, pregunta con cuánta anticipación necesitan (mínimo 48hrs)
-- Ofrece delivery cuando corresponda
-- Si preguntan por Yape, da el número ${TELEFONO}
-- Siempre despídete con un mensaje amable
+Cliente: "Vivo en Cerro Colorado, calle Los Pinos 123"
+Tú: "Gracias. El delivery a Cerro Colorado cuesta S/3.00. Total a pagar: S/13.00 (S/10.00 de panes + S/3.00 de envío). ¿Confirmas el pedido?"
 
-EJEMPLO DE RESPUESTA:
-"¡Hola! 🥖 En Panadería Delicias tenemos una oferta especial: 3 panes por solo S/1.00. Tenemos pan de molde, integral, baguette, ciabatta, entre otros. ¿Cuántos panes necesitas? También hacemos tortas temáticas con 48hrs de anticipación. ¡Te esperamos! 🎂"
+Cliente: "Confirmo"
+Tú: "¡Listo! Tu pedido llegará en 30-45 min. Puedes pagar con Yape al ${NEGOCIO.telefono} o efectivo al recibir. 🥖"
 `
         };
         
@@ -262,7 +297,6 @@ async function startBot() {
             if (qr) {
                 console.log('\n📱 ESCANEA ESTE QR CON WHATSAPP:\n');
                 qrcode.generate(qr, { small: false });
-                console.log('\n🔗 Si no funciona, usa: https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=' + encodeURIComponent(qr));
                 console.log('\n⏱️ El QR expira rápido. Escanéalo en los próximos 20 segundos.\n');
                 reconnectAttempts = 0;
             }
@@ -280,8 +314,8 @@ async function startBot() {
             } else if (connection === 'open') {
                 console.log('\n✅ ¡BOT CONECTADO A WHATSAPP!');
                 console.log('🤖 Bot con DeepSeek AI activo');
-                console.log('🥖 Panadería Delicias - 3 panes por S/1.00');
-                console.log('🎂 Tortas temáticas disponibles\n');
+                console.log(`🥖 ${NEGOCIO.nombre} - 3 panes por S/1.00`);
+                console.log('🚚 Delivery disponible\n');
                 reconnectAttempts = 0;
             }
         });
@@ -303,30 +337,115 @@ async function startBot() {
                 
                 console.log(`\n📩 Mensaje: ${messageText.substring(0, 50)}`);
                 
-                // Detectar ubicación
+                // 1. Detectar ubicación del NEGOCIO
                 if (esPreguntaUbicacion(messageText)) {
-                    console.log(`📍 Respondiendo ubicación`);
+                    console.log(`📍 Respondiendo ubicación del negocio`);
                     await sock.sendMessage(from, { text: generarRespuestaUbicacion() });
                     return;
                 }
                 
-                // Detectar preguntas de pago
+                // 2. Detectar preguntas de pago
                 if (esPreguntaPagos(messageText)) {
                     console.log(`💰 Respondiendo métodos de pago`);
                     await sock.sendMessage(from, { text: generarRespuestaPagos() });
                     return;
                 }
                 
-                // Respuesta normal con IA
+                // 3. Detectar pedidos con cantidades
+                const pedidoInfo = detectarCantidadYPrecio(messageText);
+                if (pedidoInfo && (messageText.toLowerCase().includes('pan') || messageText.toLowerCase().includes('quiero') || messageText.toLowerCase().includes('dame') || messageText.toLowerCase().includes('delivery'))) {
+                    console.log(`🧮 Pedido detectado: ${pedidoInfo.cantidad} panes = ${pedidoInfo.precioFormateado}`);
+                    
+                    // Guardar el pedido en la conversación
+                    conversaciones.set(from, {
+                        pedido: pedidoInfo,
+                        estado: 'esperando_direccion',
+                        cantidad: pedidoInfo.cantidad,
+                        precioPanes: pedidoInfo.precio
+                    });
+                    
+                    let respuesta = `🥖 *Pedido: ${pedidoInfo.cantidad} panes*\n`;
+                    respuesta += `💰 *Subtotal:* ${pedidoInfo.precioFormateado} (${pedidoInfo.cantidad} ÷ 3)\n\n`;
+                    respuesta += `📋 *Variedades:* ${VARIEDADES_PANES.slice(0, 5).join(', ')} y más.\n\n`;
+                    respuesta += `🚚 *Para delivery, necesito saber:*\n`;
+                    respuesta += `📍 ¿Cuál es tu dirección de envío?\n\n`;
+                    respuesta += `📍 *Para recoger en tienda:* ${NEGOCIO.direccion}\n`;
+                    respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono} o efectivo`;
+                    
+                    await sock.sendMessage(from, { text: respuesta });
+                    return;
+                }
+                
+                // 4. Manejar direcciones de envío (si el bot está esperando una dirección)
+                const conversacion = conversaciones.get(from);
+                if (conversacion && conversacion.estado === 'esperando_direccion') {
+                    const direccionCliente = messageText.trim();
+                    if (direccionCliente.length > 5) {
+                        const costoDelivery = calcularCostoDelivery(direccionCliente);
+                        const totalFinal = conversacion.precioPanes + costoDelivery;
+                        
+                        let respuesta = `✅ *Dirección recibida:*\n${direccionCliente}\n\n`;
+                        respuesta += `🚚 *Costo de delivery:* S/ ${costoDelivery.toFixed(2)}\n`;
+                        respuesta += `🍞 *Panes:* ${conversacion.cantidad} = S/ ${conversacion.precioPanes.toFixed(2)}\n`;
+                        respuesta += `💰 *TOTAL A PAGAR:* S/ ${totalFinal.toFixed(2)}\n\n`;
+                        respuesta += `📞 *Confirmamos tu pedido?*\n`;
+                        respuesta += `Responde "Confirmo" para enviarlo.\n\n`;
+                        respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono} (${NEGOCIO.titularYape}) o efectivo al recibir.`;
+                        
+                        // Actualizar estado
+                        conversacion.estado = 'esperando_confirmacion';
+                        conversacion.direccion = direccionCliente;
+                        conversacion.costoDelivery = costoDelivery;
+                        conversacion.total = totalFinal;
+                        conversaciones.set(from, conversacion);
+                        
+                        await sock.sendMessage(from, { text: respuesta });
+                        return;
+                    } else {
+                        await sock.sendMessage(from, { text: "📍 Por favor, escribí tu dirección completa para poder enviarte el pedido (calle, número, zona)." });
+                        return;
+                    }
+                }
+                
+                // 5. Manejar confirmación de pedido
+                if (conversacion && conversacion.estado === 'esperando_confirmacion' && 
+                    (messageText.toLowerCase().includes('confirmo') || messageText.toLowerCase().includes('si') || messageText.toLowerCase().includes('acepto'))) {
+                    
+                    let respuesta = `🎉 *¡PEDIDO CONFIRMADO!* 🎉\n\n`;
+                    respuesta += `📦 *Detalles:*\n`;
+                    respuesta += `🍞 ${conversacion.cantidad} panes (variados)\n`;
+                    respuesta += `📍 Envío a: ${conversacion.direccion}\n`;
+                    respuesta += `🚚 Costo delivery: S/ ${conversacion.costoDelivery.toFixed(2)}\n`;
+                    respuesta += `💰 Total: S/ ${conversacion.total.toFixed(2)}\n\n`;
+                    respuesta += `⏱️ *Tiempo de entrega:* 30-45 minutos\n`;
+                    respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono} o efectivo al recibir\n\n`;
+                    respuesta += `📞 *Cualquier consulta:* ${NEGOCIO.telefono}\n\n`;
+                    respuesta += `🥖 ¡Gracias por tu pedido! 🥖`;
+                    
+                    // Limpiar conversación después de confirmar
+                    conversaciones.delete(from);
+                    
+                    await sock.sendMessage(from, { text: respuesta });
+                    return;
+                }
+                
+                // 6. Si el cliente dice "recoger en tienda" o similar
+                if (messageText.toLowerCase().includes('recoger') || messageText.toLowerCase().includes('tienda') || messageText.toLowerCase().includes('local')) {
+                    const respuesta = `📍 *Recojo en tienda:*\n${NEGOCIO.direccion}\n\n🕐 Horario: ${NEGOCIO.horario}\n\n💳 Paga con Yape al ${NEGOCIO.telefono} o efectivo al llegar.\n\n🥖 ¡Te esperamos!`;
+                    await sock.sendMessage(from, { text: respuesta });
+                    return;
+                }
+                
+                // 7. Respuesta normal con IA
                 await sock.sendMessage(from, { text: '🫘 *PanBot está pensando...*' });
-                const respuesta = await getDeepSeekResponse(messageText, from);
+                const respuesta = await getDeepSeekResponse(messageText, from, conversacion);
                 await sock.sendMessage(from, { text: respuesta });
                 
             } catch (error) {
                 console.error('❌ Error:', error);
                 if (m?.messages[0]?.key?.remoteJid) {
                     await sock.sendMessage(m.messages[0].key.remoteJid, { 
-                        text: 'Lo siento, hubo un error. Intentá de nuevo en unos momentos. 🥨' 
+                        text: 'Lo siento, hubo un error. Intentá de nuevo. 🥨' 
                     });
                 }
             }
@@ -342,20 +461,20 @@ async function startBot() {
     }
 }
 
-// ============= INICIAR EL BOT =============
-console.log('\n🚀 Iniciando PanBot - Panadería Delicias...');
-console.log(`📅 Versión de Node: ${process.version}`);
-console.log('🥖 Oferta especial: 3 panes por S/1.00');
-console.log('🎂 Tortas temáticas con 48hrs de anticipación\n');
+// ============= KEEP ALIVE =============
+const KEEP_ALIVE_INTERVAL = 14 * 60 * 1000;
+
+setInterval(() => {
+    console.log("💓 [Keep-Alive] Ping automático");
+    fetch(`http://localhost:${PORT}/health`).catch(() => {});
+}, KEEP_ALIVE_INTERVAL);
+
+// ============= INICIAR =============
+console.log('\n🚀 Iniciando PanBot...');
+console.log(`🥖 ${NEGOCIO.nombre}`);
+console.log('🚚 Delivery incluido\n');
 
 startBot();
 
-process.on('SIGINT', async () => {
-    console.log('\n🛑 Apagando el bot...');
-    process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-    console.log('\n🛑 Apagando el bot...');
-    process.exit(0);
-});
+process.on('SIGINT', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
