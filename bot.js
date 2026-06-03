@@ -1,20 +1,16 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import pkg from '@whiskeysockets/baileys';
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = pkg;
 import qrcode from 'qrcode';
 import express from 'express';
 import fetch from 'node-fetch';
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // ============= LIMPIAR SESIÓN =============
 const authFolder = './auth_data';
-const FORZAR_LIMPIEZA = true;  // Temporal: cambiar a false después de escanear QR
+const FORZAR_LIMPIEZA = true;  // Cambiar a false después de escanear QR
 
 if (FORZAR_LIMPIEZA && fs.existsSync(authFolder)) {
     console.log('🗑️ LIMPIANDO SESIÓN CORRUPTA...');
@@ -38,14 +34,6 @@ const NEGOCIO = {
     telefono: "999555333",
     titularYape: "James Baca",
     horario: "Todos los días de 7am a 8pm"
-};
-
-const COSTO_DELIVERY = {
-    "cerro colorado": 3.00,
-    "cerca": 3.00,
-    "alrededores": 5.00,
-    "lejos": 8.00,
-    "default": 5.00
 };
 
 const VARIEDADES_PANES = [
@@ -94,7 +82,6 @@ app.get('/', (req, res) => {
                 <p>⏱️ Si no ves el QR, recarga la página</p>
             </div>
             <p><a href="/qr-image" target="_blank">🔗 Abrir QR en nueva pestaña</a></p>
-            <p><a href="/qr-text" target="_blank">📝 Ver QR como texto</a></p>
         </body>
         </html>
     `);
@@ -117,22 +104,6 @@ app.get('/qr-image', async (req, res) => {
     }
 });
 
-app.get('/qr-text', (req, res) => {
-    if (currentQR) {
-        res.send(`
-            <html>
-            <body style="text-align:center; padding:50px;">
-                <h2>📱 Código QR en texto</h2>
-                <textarea rows="3" cols="60">${currentQR}</textarea>
-                <p>Copia este texto en <a href="https://www.the-qrcode-generator.com/" target="_blank">generador QR</a></p>
-            </body>
-            </html>
-        `);
-    } else {
-        res.send("Esperando QR...");
-    }
-});
-
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 app.listen(PORT, () => {
@@ -142,68 +113,30 @@ app.listen(PORT, () => {
 
 // ============= FUNCIONES =============
 function esPreguntaUbicacion(mensaje) {
-    const palabrasClave = ['dirección', 'ubicación', 'dónde están', 'cómo llegar', 'maps', 'dónde queda', 'en qué calle', 'ubicame', 'llegar', 'donde te encuentro', 'ubicacion', 'mapa', 'referencia', 'buganvillas'];
-    const mensajeLower = mensaje.toLowerCase();
-    return palabrasClave.some(palabra => mensajeLower.includes(palabra));
+    const palabrasClave = ['dirección', 'ubicación', 'dónde están', 'cómo llegar', 'maps', 'dónde queda', 'ubicacion', 'mapa', 'referencia', 'buganvillas'];
+    return palabrasClave.some(palabra => mensaje.toLowerCase().includes(palabra));
 }
 
 function esPreguntaPagos(mensaje) {
-    const palabrasClave = ['pago', 'pagar', 'yape', 'efectivo', 'transferencia', 'tarjeta', 'costo', 'precio', 'cuánto', 'valor'];
-    const mensajeLower = mensaje.toLowerCase();
-    return palabrasClave.some(palabra => mensajeLower.includes(palabra));
+    const palabrasClave = ['pago', 'pagar', 'yape', 'efectivo', 'transferencia', 'precio', 'cuánto', 'costo'];
+    return palabrasClave.some(palabra => mensaje.toLowerCase().includes(palabra));
 }
 
 function generarRespuestaUbicacion() {
-    return `📍 *Dirección del negocio:*
-
-🏠 ${NEGOCIO.nombre}
-${NEGOCIO.direccion}
-Referencia: ${NEGOCIO.referencia}
-
-🗺️ Google Maps: ${NEGOCIO.maps}
-
-📞 Teléfono: ${NEGOCIO.telefono}
-
-🕐 Horario: ${NEGOCIO.horario}
-
-🍞 ¡Te esperamos! 🥖`;
+    return `📍 *Dirección:*\n${NEGOCIO.direccion}\n\nReferencia: ${NEGOCIO.referencia}\n\n🗺️ Google Maps: ${NEGOCIO.maps}\n\n📞 Teléfono: ${NEGOCIO.telefono}\n\n🕐 Horario: ${NEGOCIO.horario}`;
 }
 
 function generarRespuestaPagos() {
-    return `💵 *Métodos de pago:*
-
-✅ *Yape:* ${NEGOCIO.telefono} (${NEGOCIO.titularYape})
-✅ *Efectivo:* En nuestra tienda
-
-🎁 *Promoción:* 3 panes por S/1.00
-
-🚚 *Delivery:* Consulta costo según tu zona`;
+    return `💵 *Métodos de pago:*\n\n✅ Yape: ${NEGOCIO.telefono} (${NEGOCIO.titularYape})\n✅ Efectivo en tienda\n\n🎁 Promoción: 3 panes por S/1.00`;
 }
 
-function detectarCantidadYPrecio(mensaje) {
+function detectarCantidad(mensaje) {
     const numeros = mensaje.match(/\d+/g);
     if (!numeros) return null;
-    
-    let cantidad = parseInt(numeros[0]);
+    const cantidad = parseInt(numeros[0]);
     if (isNaN(cantidad) || cantidad <= 0) return null;
-    
     const precioTotal = (cantidad / 3).toFixed(2);
-    
-    return {
-        cantidad: cantidad,
-        precio: parseFloat(precioTotal),
-        precioFormateado: `S/ ${precioTotal}`
-    };
-}
-
-function calcularCostoDelivery(zona) {
-    const zonaLower = zona.toLowerCase();
-    for (const [key, costo] of Object.entries(COSTO_DELIVERY)) {
-        if (zonaLower.includes(key)) {
-            return costo;
-        }
-    }
-    return COSTO_DELIVERY.default;
+    return { cantidad, precio: parseFloat(precioTotal), precioFormateado: `S/ ${precioTotal}` };
 }
 
 async function getDeepSeekResponse(userMessage, chatId) {
@@ -223,27 +156,7 @@ async function getDeepSeekResponse(userMessage, chatId) {
         
         const systemMessage = {
             role: "system",
-            content: `Eres "PanBot", asistente de "${NEGOCIO.nombre}".
-
-INFORMACIÓN DEL NEGOCIO:
-- Dirección: ${NEGOCIO.direccion}
-- Referencia: ${NEGOCIO.referencia}
-- Horario: ${NEGOCIO.horario}
-- Teléfono: ${NEGOCIO.telefono}
-- Yape: ${NEGOCIO.telefono} (${NEGOCIO.titularYape})
-
-PRECIOS:
-- 3 panes por S/1.00 (cualquier variedad)
-
-VARIEDADES DE PAN:
-${VARIEDADES_PANES.map(p => `- ${p}`).join('\n')}
-
-DELIVERY:
-- Preguntar la dirección del cliente
-- Calcular costo según zona
-- Total = (panes/3) + delivery
-
-Responde SIEMPRE en español, amable, con emojis 🥖`
+            content: `Eres "PanBot" de "${NEGOCIO.nombre}". Precio: 3 panes por S/1.00. Variedades: ${VARIEDADES_PANES.join(', ')}. Dirección: ${NEGOCIO.direccion}. Horario: ${NEGOCIO.horario}. Yape: ${NEGOCIO.telefono}. Responde amable, en español, con emojis 🥖`
         };
         
         const messages = [systemMessage, ...history];
@@ -263,7 +176,6 @@ Responde SIEMPRE en español, amable, con emojis 🥖`
         });
         
         const data = await response.json();
-        
         if (!response.ok) throw new Error('DeepSeek API error');
         
         const botReply = data.choices[0].message.content;
@@ -299,14 +211,12 @@ async function startBot() {
             
             if (qr) {
                 console.log('\n📱 NUEVO QR GENERADO');
-                console.log('🌐 Para escanearlo, abre:');
-                console.log(`   https://bot-panaderia.onrender.com/qr-image`);
-                console.log('⏱️ El QR expira en 20 segundos.\n');
+                console.log('🌐 Abrir: https://bot-panaderia.onrender.com/qr-image\n');
                 
                 try {
                     const qrImageBuffer = await qrcode.toBuffer(qr, { type: 'png', margin: 2, width: 400 });
                     currentQR = qrImageBuffer;
-                    console.log('✅ QR guardado en memoria');
+                    console.log('✅ QR listo para escanear');
                 } catch (err) {
                     console.error('Error generando QR:', err);
                 }
@@ -325,8 +235,7 @@ async function startBot() {
                 }
             } else if (connection === 'open') {
                 console.log('\n✅ ¡BOT CONECTADO A WHATSAPP!');
-                console.log(`🥖 ${NEGOCIO.nombre} - 3 panes por S/1.00`);
-                console.log('🚚 Delivery disponible\n');
+                console.log(`🥖 ${NEGOCIO.nombre} - 3 panes por S/1.00\n`);
                 reconnectAttempts = 0;
                 currentQR = null;
             }
@@ -359,58 +268,12 @@ async function startBot() {
                     return;
                 }
                 
-                const pedidoInfo = detectarCantidadYPrecio(messageText);
-                if (pedidoInfo && (messageText.toLowerCase().includes('pan') || messageText.toLowerCase().includes('quiero') || messageText.toLowerCase().includes('dame'))) {
-                    console.log(`🧮 Pedido: ${pedidoInfo.cantidad} panes = ${pedidoInfo.precioFormateado}`);
-                    
-                    conversaciones.set(from, {
-                        estado: 'esperando_direccion',
-                        cantidad: pedidoInfo.cantidad,
-                        precioPanes: pedidoInfo.precio
-                    });
-                    
-                    let respuesta = `🥖 *Pedido: ${pedidoInfo.cantidad} panes*\n`;
-                    respuesta += `💰 *Subtotal:* ${pedidoInfo.precioFormateado} (${pedidoInfo.cantidad} ÷ 3)\n\n`;
-                    respuesta += `🚚 *¿Quieres delivery o lo pasas a recoger?*\n`;
-                    respuesta += `📍 *Para recoger:* ${NEGOCIO.direccion}\n`;
-                    respuesta += `🚚 *Para delivery:* Envíame tu dirección`;
-                    
-                    await sock.sendMessage(from, { text: respuesta });
-                    return;
-                }
-                
-                const conversacion = conversaciones.get(from);
-                if (conversacion && conversacion.estado === 'esperando_direccion' && messageText.length > 10) {
-                    const costoDelivery = calcularCostoDelivery(messageText);
-                    const totalFinal = conversacion.precioPanes + costoDelivery;
-                    
-                    let respuesta = `✅ *Dirección recibida*\n\n`;
-                    respuesta += `🚚 *Costo delivery:* S/ ${costoDelivery.toFixed(2)}\n`;
-                    respuesta += `🍞 *Panes:* S/ ${conversacion.precioPanes.toFixed(2)}\n`;
-                    respuesta += `💰 *TOTAL:* S/ ${totalFinal.toFixed(2)}\n\n`;
-                    respuesta += `📞 *Confirma tu pedido?* (responde "Confirmo")\n`;
-                    respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono} o efectivo`;
-                    
-                    conversacion.estado = 'esperando_confirmacion';
-                    conversacion.total = totalFinal;
-                    conversaciones.set(from, conversacion);
-                    
-                    await sock.sendMessage(from, { text: respuesta });
-                    return;
-                }
-                
-                if (conversacion && conversacion.estado === 'esperando_confirmacion' && 
-                    (messageText.toLowerCase().includes('confirmo') || messageText.toLowerCase().includes('si'))) {
-                    
-                    let respuesta = `🎉 *¡PEDIDO CONFIRMADO!* 🎉\n\n`;
-                    respuesta += `📦 *Detalles:*\n`;
-                    respuesta += `🍞 ${conversacion.cantidad} panes\n`;
-                    respuesta += `💰 Total: S/ ${conversacion.total.toFixed(2)}\n\n`;
-                    respuesta += `⏱️ *Entrega:* 30-45 min\n`;
-                    respuesta += `💳 *Pago:* Yape al ${NEGOCIO.telefono}\n\n`;
-                    respuesta += `🥖 ¡Gracias por tu pedido! 🥖`;
-                    
-                    conversaciones.delete(from);
+                const pedido = detectarCantidad(messageText);
+                if (pedido && messageText.toLowerCase().includes('pan')) {
+                    let respuesta = `🥖 *${pedido.cantidad} panes* = ${pedido.precioFormateado}\n`;
+                    respuesta += `📋 Variedades: ${VARIEDADES_PANES.slice(0, 5).join(', ')}\n\n`;
+                    respuesta += `📍 Retiro: ${NEGOCIO.direccion}\n`;
+                    respuesta += `🚚 Delivery: Envíame tu dirección para calcular costo`;
                     await sock.sendMessage(from, { text: respuesta });
                     return;
                 }
@@ -438,7 +301,7 @@ setInterval(() => {
 // ============= INICIAR =============
 console.log('\n🚀 Iniciando PanBot...');
 console.log(`🥖 ${NEGOCIO.nombre}`);
-console.log(`📱 QR visible en: https://bot-panaderia.onrender.com/qr-image\n`);
+console.log(`📱 QR: https://bot-panaderia.onrender.com/qr-image\n`);
 
 startBot();
 
