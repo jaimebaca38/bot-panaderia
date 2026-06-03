@@ -1,6 +1,6 @@
 {
   "name": "panaderia-deepseek-bot",
-  "version": "6.0.0",
+  "version": "7.0.0",
   "type": "module",
   "description": "Bot de WhatsApp para Panadería con DeepSeek AI",
   "main": "bot.js",
@@ -9,12 +9,12 @@
     "dev": "nodemon bot.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.0",
-    "dotenv": "^16.3.1",
+    "@whiskeysockets/baileys": "6.6.0",
+    "qrcode": "^1.5.3",
     "express": "^4.18.2",
+    "dotenv": "^16.3.1",
     "node-fetch": "^3.3.2",
-    "pino": "^8.17.2",
-    "qrcode-terminal": "^0.12.0"
+    "pino": "^8.17.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
